@@ -1,7 +1,11 @@
 package home;
 
+import java.io.BufferedReader;
 import java.io.FileInputStream;
+import java.io.InputStreamReader;
 import java.util.UUID;
+import java.util.logging.LogManager;
+import java.util.logging.Logger;
 
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.firebase.FirebaseApp;
@@ -21,11 +25,14 @@ import org.eclipse.paho.client.mqttv3.MqttMessage;
 
 import home.device.IOPort.Power;
 import home.device.Device;
+import home.device.DeviceManager;
 
 /**
  * Hello world!
  */
 public final class App {
+    private static final Logger LOG = Logger.getLogger(App.class.getName());
+
     private App() {
     }
 
@@ -35,17 +42,21 @@ public final class App {
      * @param args The arguments of the program.
      */
     public static void main(final String[] args) throws Exception {
-        System.out.println("Hello World!");
+        System.setProperty("java.util.logging.config.file", "home-coordinator/logging.properties");
+        LogManager.getLogManager().readConfiguration();
 
         String serviceAccountFilename = System.getenv("firebaseServiceAccount");
         String firebaseDatabaseUrl = System.getenv("firebaseDatabaseUrl");
+
+        LOG.info("Firebase service account file: " + serviceAccountFilename);
+        LOG.info("Firebase database URL: " + firebaseDatabaseUrl);
 
         // Firebase
         FileInputStream serviceAccount = new FileInputStream(serviceAccountFilename);
 
         FirebaseOptions firebaseOptions = new FirebaseOptions.Builder()
-                .setCredentials(GoogleCredentials.fromStream(serviceAccount))
-                .setDatabaseUrl(firebaseDatabaseUrl).build();
+                .setCredentials(GoogleCredentials.fromStream(serviceAccount)).setDatabaseUrl(firebaseDatabaseUrl)
+                .build();
 
         FirebaseApp.initializeApp(firebaseOptions);
 
@@ -68,9 +79,14 @@ public final class App {
         DatabaseReference deviceRef = FirebaseDatabase.getInstance().getReference("/devices");
 
         // MQTT
+        String mqttAddress = System.getenv("mqttAddress");
+        String mqttPort = System.getenv("mqttPort");
+        LOG.info("MQTT Server: " + mqttAddress + ":" + mqttPort);
 
         final String clientId = UUID.randomUUID().toString();
-        final IMqttClient client = new MqttClient("tcp://10.12.0.1:1883", clientId);
+        final IMqttClient client = new MqttClient("tcp://" + mqttAddress + ":" + mqttPort, clientId);
+
+        DeviceManager deviceManager = new DeviceManager(client, deviceRef);
 
         final MqttConnectOptions options = new MqttConnectOptions();
         options.setAutomaticReconnect(true);
@@ -88,26 +104,28 @@ public final class App {
                 String device = topicParts[1];
                 String postfix = topicParts[2];
                 switch (prefix.toUpperCase()) {
-                    case "STAT":
-                        if (postfix.toUpperCase().equals("RESULT")){
-                            // ignore result state
-                        } else if (postfix.toUpperCase().startsWith("POWER")) {
-                            System.out.printf("MQTT PROCESSED: Port state: %s:%s %s\n", device, postfix, new String(message.getPayload()));
-                            Device d = Device.getDevice(device, client, deviceRef);
-                            d.getPort(postfix).setState(new String(message.getPayload()));
-                        }
-                        break;
-                    case "TELE":
-                        if (postfix.toUpperCase().equals("STATE")){
-                            System.out.printf("MQTT PROCESSED: Device state: %s %s\n", device, new String(message.getPayload()));
-                        }
-                        break;
-                    case "CMND":
-                        // ignore published command messages
-                        break;
-                    default:
-                        System.out.printf("MQTT NOT PROCESSED: %s: %s\n", topic, new String(message.getPayload()));
-                        break;
+                case "STAT":
+                    if (postfix.toUpperCase().equals("RESULT")) {
+                        // ignore result state
+                    } else if (postfix.toUpperCase().startsWith("POWER")) {
+                        LOG.fine(String.format("MQTT PROCESSED: Port state: %s:%s %s", device, postfix,
+                                new String(message.getPayload())));
+                        Device d = deviceManager.getDevice(device);
+                        d.getPort(postfix).setState(new String(message.getPayload()));
+                    }
+                    break;
+                case "TELE":
+                    if (postfix.toUpperCase().equals("STATE")) {
+                        LOG.fine(String.format("MQTT PROCESSED: Device state: %s %s", device,
+                                new String(message.getPayload())));
+                    }
+                    break;
+                case "CMND":
+                    // ignore published command messages
+                    break;
+                default:
+                    LOG.warning(String.format("MQTT NOT PROCESSED: %s: %s", topic, new String(message.getPayload())));
+                    break;
                 }
 
             }
@@ -125,25 +143,25 @@ public final class App {
             }
         });
 
-        final Device s = Device.getDevice("front-door-light-switch", client, deviceRef);
+        final Device s = deviceManager.getDevice("front-door-light-switch");
 
-        System.out.println("Press a key to exit...");
+        System.out.println("Press 1,2,3 to toggle switch, anything else to exit...");
+        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
         while (true) {
-            switch (System.in.read()) {
-            case '1':
+            String command = br.readLine();
+            switch (command) {
+            case "1":
                 s.getPort("Power1").setPower(Power.TOGGLE);
                 break;
-            case '2':
+            case "2":
                 s.getPort("Power2").setPower(Power.TOGGLE);
                 break;
-            case '3':
+            case "3":
                 s.getPort("Power3").setPower(Power.TOGGLE);
                 break;
-            case '\n':
-                break;
-            case '\r':
-                break;
             default:
+                LOG.info("Closing connections");
+                br.close();
                 client.disconnect();
                 client.close();
                 return;

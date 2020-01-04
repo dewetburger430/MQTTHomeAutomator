@@ -1,27 +1,27 @@
 package home.device;
 
+import java.util.logging.Logger;
+
 import com.google.firebase.database.DatabaseReference;
 
 public class IOPort {
+    private static final Logger LOG = Logger.getLogger(IOPort.class.getName());
+
     private final Device device;
     private final String name;
     private final DatabaseReference database;
 
     private State state = State.UNKNOWN;
 
-    public enum State{
-        UNKNOWN,
-        ON,
-        OFF,
+    public enum State {
+        UNKNOWN, ON, OFF,
     }
 
-    public enum Power{
-        ON,
-        OFF,
-        TOGGLE,
+    public enum Power {
+        ON, OFF, TOGGLE,
     }
 
-    protected IOPort(final Device device, final String name, final DatabaseReference database){
+    protected IOPort(final Device device, final String name, final DatabaseReference database) {
         this.device = device;
         this.name = name;
         this.database = database.child(name.toUpperCase());
@@ -29,10 +29,12 @@ public class IOPort {
     }
 
     public void setPower(final Power p) throws Exception {
+        LOG.finer("Set IOPort power: " + p.toString());
         device.send(name, p.toString());
     }
 
     public void setState(final String state) {
+        LOG.finer("Set IOPort state: " + state.toString());
         try {
             final State ps = this.state;
             this.state = State.valueOf(state.toUpperCase());
@@ -40,6 +42,7 @@ public class IOPort {
                 this.database.setValueAsync(this);
             }
         } catch (final Exception e) {
+            LOG.warning("Could not update state");
             this.state = State.UNKNOWN;
         }
     }
