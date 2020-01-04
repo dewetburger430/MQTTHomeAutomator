@@ -107,6 +107,9 @@ public final class App {
                             System.out.printf("MQTT PROCESSED: Device state: %s %s\n", device, new String(message.getPayload()));
                         }
                         break;
+                    case "CMND":
+                        // ignore published command messages
+                        break;
                     default:
                         System.out.printf("MQTT NOT PROCESSED: %s: %s\n", topic, new String(message.getPayload()));
                         break;
