@@ -45,7 +45,6 @@ public class Device {
         LOG.finer("Update device in firebase");
         this.database = database.child("list").child(this.firebaseId);
         this.database.updateChildrenAsync(java.util.Collections.singletonMap("topic", topic));
-        this.database.updateChildrenAsync(java.util.Collections.singletonMap("name", topic));
     }
 
     private String getOrAllocateFirebaseId(DatabaseReference database) {
@@ -90,6 +89,9 @@ public class Device {
     }
 
     public void setTopic(String topic) {
+        if (this.topic == null) {
+            this.database.updateChildrenAsync(java.util.Collections.singletonMap("topic", topic));
+        }
         this.topic = topic;
     }
 
