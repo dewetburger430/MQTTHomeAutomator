@@ -1,4 +1,4 @@
-package home;
+package home.device;
 
 public class IOPort {
     private final Device device;
@@ -6,19 +6,19 @@ public class IOPort {
 
     private State state = State.UNKNOWN;
 
-    enum State{
+    public enum State{
         UNKNOWN,
         ON,
         OFF,
     }
 
-    enum Power{
+    public enum Power{
         ON,
         OFF,
         TOGGLE,
     }
 
-    public IOPort(final Device device, final String name){
+    protected IOPort(final Device device, final String name){
         this.device = device;
         this.name = name;
     }

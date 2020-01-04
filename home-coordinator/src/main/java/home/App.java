@@ -1,9 +1,7 @@
 package home;
 
 import java.io.FileInputStream;
-import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.firebase.FirebaseApp;
@@ -21,7 +19,8 @@ import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
 
-import home.IOPort.Power;
+import home.device.IOPort.Power;
+import home.device.Device;
 
 /**
  * Hello world!
@@ -29,8 +28,6 @@ import home.IOPort.Power;
 public final class App {
     private App() {
     }
-
-    private static Map <String, Device> deviceMap = new ConcurrentHashMap<>(32);
 
     /**
      * Says hello to the world.
@@ -98,7 +95,7 @@ public final class App {
                             // ignore result state
                         } else if (postfix.toUpperCase().startsWith("POWER")) {
                             System.out.printf("MQTT PROCESSED: Port state: %s:%s %s\n", device, postfix, new String(message.getPayload()));
-                            Device d = deviceMap.computeIfAbsent(device, dev -> new Device(client, dev));
+                            Device d = Device.getDevice(device, client);
                             d.getPort(postfix).updateState(new String(message.getPayload()));
                         }
                         break;
@@ -130,8 +127,7 @@ public final class App {
             }
         });
 
-        final Device s = new Device(client, "front-door-light-switch");
-        deviceMap.putIfAbsent("front-door-light-switch", s);
+        final Device s = Device.getDevice("front-door-light-switch", client);
         for (int i = 0; i < 10; i++) {
             for (int j = 1; j < 4; j++) {
                 s.getPort("Power"+j).setPower(Power.TOGGLE);
