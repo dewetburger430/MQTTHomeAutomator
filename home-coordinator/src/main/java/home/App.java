@@ -110,7 +110,7 @@ public final class App {
                     } else if (postfix.toUpperCase().startsWith("POWER")) {
                         LOG.fine(String.format("MQTT PROCESSED: Port state: %s:%s %s", device, postfix,
                                 new String(message.getPayload())));
-                        Device d = deviceManager.getDevice(device);
+                        Device d = deviceManager.getDeviceByTopic(device);
                         d.getPort(postfix).setState(new String(message.getPayload()));
                     }
                     break;
@@ -143,7 +143,7 @@ public final class App {
             }
         });
 
-        final Device s = deviceManager.getDevice("front-door-light-switch");
+        final Device s = deviceManager.getDeviceByTopic("front-door-light-switch");
 
         System.out.println("Press 1,2,3 to toggle switch, anything else to exit...");
         BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
