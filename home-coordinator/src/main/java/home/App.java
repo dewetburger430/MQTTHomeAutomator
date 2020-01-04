@@ -40,13 +40,15 @@ public final class App {
     public static void main(final String[] args) throws Exception {
         System.out.println("Hello World!");
 
+        String serviceAccountFilename = System.getenv("firebaseServiceAccount");
+        String firebaseDatabaseUrl = System.getenv("firebaseDatabaseUrl");
+
         // Firebase
-        FileInputStream serviceAccount = new FileInputStream(
-                "D:/Users/Dewet/Documents/GitHub/smart-axe-105012-firebase-adminsdk-hyyu0-6566389e21.json");
+        FileInputStream serviceAccount = new FileInputStream(serviceAccountFilename);
 
         FirebaseOptions firebaseOptions = new FirebaseOptions.Builder()
                 .setCredentials(GoogleCredentials.fromStream(serviceAccount))
-                .setDatabaseUrl("https://smart-axe-105012.firebaseio.com").build();
+                .setDatabaseUrl(firebaseDatabaseUrl).build();
 
         FirebaseApp.initializeApp(firebaseOptions);
 
