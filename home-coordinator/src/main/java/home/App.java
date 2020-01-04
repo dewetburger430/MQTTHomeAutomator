@@ -65,9 +65,7 @@ public final class App {
             }
         });
 
-        for (int i=1; i<100; i++){
-            ref.setValueAsync(i);
-        }
+        DatabaseReference deviceRef = FirebaseDatabase.getInstance().getReference("/devices");
 
         // MQTT
 
@@ -95,8 +93,8 @@ public final class App {
                             // ignore result state
                         } else if (postfix.toUpperCase().startsWith("POWER")) {
                             System.out.printf("MQTT PROCESSED: Port state: %s:%s %s\n", device, postfix, new String(message.getPayload()));
-                            Device d = Device.getDevice(device, client);
-                            d.getPort(postfix).updateState(new String(message.getPayload()));
+                            Device d = Device.getDevice(device, client, deviceRef);
+                            d.getPort(postfix).setState(new String(message.getPayload()));
                         }
                         break;
                     case "TELE":
@@ -127,12 +125,7 @@ public final class App {
             }
         });
 
-        final Device s = Device.getDevice("front-door-light-switch", client);
-        for (int i = 0; i < 10; i++) {
-            for (int j = 1; j < 4; j++) {
-                s.getPort("Power"+j).setPower(Power.TOGGLE);
-            }
-        }
+        final Device s = Device.getDevice("front-door-light-switch", client, deviceRef);
 
         System.out.println("Press a key to exit...");
         while (true) {
