@@ -10,21 +10,25 @@ import com.google.firebase.database.ValueEventListener;
 public class Firebase {
     private static final Logger LOG = Logger.getLogger(Firebase.class.getName());
 
-    public static Object readObject(DatabaseReference ref) {
+    public static DataSnapshot readObject(DatabaseReference ref) {
         final Object sync = new Object();
 
-        Object[] retval = new Object[1];
+        DataSnapshot[] retval = new DataSnapshot[1];
 
         ref.addListenerForSingleValueEvent(new ValueEventListener() {
 
             @Override
             public void onDataChange(DataSnapshot snapshot) {
-                LOG.fine("Data retrieved for " + ref.getPath() + ": " + snapshot);
-                if (!snapshot.getValue().equals("null")) {
-                    retval[0] = snapshot.getValue();
-                }
-                synchronized (sync) {
-                    sync.notifyAll();
+                try {
+                    LOG.fine("Data retrieved for " + ref.getPath() + ": " + snapshot);
+                    if (!snapshot.getValue().equals("null")) {
+                        retval[0] = snapshot;
+                    }
+                } catch (Exception e) {
+                } finally {
+                    synchronized (sync) {
+                        sync.notifyAll();
+                    }
                 }
             }
 

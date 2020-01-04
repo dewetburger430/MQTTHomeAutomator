@@ -85,14 +85,13 @@ public final class App {
 
         final String clientId = UUID.randomUUID().toString();
         final IMqttClient client = new MqttClient("tcp://" + mqttAddress + ":" + mqttPort, clientId);
-
-        DeviceManager deviceManager = new DeviceManager(client, deviceRef);
-
         final MqttConnectOptions options = new MqttConnectOptions();
         options.setAutomaticReconnect(true);
         options.setCleanSession(true);
         options.setConnectionTimeout(10);
         client.connect(options);
+
+        DeviceManager deviceManager = new DeviceManager(client, deviceRef);
 
         client.subscribe("#");
         client.setCallback(new MqttCallback() {
@@ -106,7 +105,10 @@ public final class App {
                 switch (prefix.toUpperCase()) {
                 case "STAT":
                     if (postfix.toUpperCase().equals("RESULT")) {
-                        // ignore result state
+                        LOG.fine(String.format("MQTT PROCESSED: Device state: %s %s", device,
+                                new String(message.getPayload())));
+                        Device d = deviceManager.getDeviceByTopic(device);
+                        d.updateStatus(new String(message.getPayload()));
                     } else if (postfix.toUpperCase().startsWith("POWER")) {
                         LOG.fine(String.format("MQTT PROCESSED: Port state: %s:%s %s", device, postfix,
                                 new String(message.getPayload())));
@@ -118,6 +120,8 @@ public final class App {
                     if (postfix.toUpperCase().equals("STATE")) {
                         LOG.fine(String.format("MQTT PROCESSED: Device state: %s %s", device,
                                 new String(message.getPayload())));
+                        Device d = deviceManager.getDeviceByTopic(device);
+                        d.updateStatus(new String(message.getPayload()));
                     }
                     break;
                 case "CMND":
@@ -142,6 +146,8 @@ public final class App {
 
             }
         });
+
+        deviceManager.requestDeviceStatus();
 
         final Device s = deviceManager.getDeviceByTopic("front-door-light-switch");
 

@@ -4,6 +4,9 @@ import java.util.logging.Logger;
 
 import com.google.firebase.database.DatabaseReference;
 
+import org.eclipse.paho.client.mqttv3.MqttException;
+import org.eclipse.paho.client.mqttv3.MqttPersistenceException;
+
 public class IOPort {
     private static final Logger LOG = Logger.getLogger(IOPort.class.getName());
 
@@ -28,7 +31,11 @@ public class IOPort {
         this.database.setValueAsync(this);
     }
 
-    public void setPower(final Power p) throws Exception {
+    public void setPower(final String p) throws MqttPersistenceException, MqttException {
+        setPower(Power.valueOf(p));
+    }
+    
+    public void setPower(final Power p) throws MqttPersistenceException, MqttException {
         LOG.finer("Set IOPort power: " + p.toString());
         device.send(name, p.toString());
     }
