@@ -83,71 +83,7 @@ public final class App {
         String mqttPort = System.getenv("mqttPort");
         LOG.info("MQTT Server: " + mqttAddress + ":" + mqttPort);
 
-        final String clientId = UUID.randomUUID().toString();
-        final IMqttClient client = new MqttClient("tcp://" + mqttAddress + ":" + mqttPort, clientId);
-        final MqttConnectOptions options = new MqttConnectOptions();
-        options.setAutomaticReconnect(true);
-        options.setCleanSession(true);
-        options.setConnectionTimeout(10);
-        client.connect(options);
-
-        DeviceManager deviceManager = new DeviceManager(client, deviceRef);
-
-        client.subscribe("#");
-        client.setCallback(new MqttCallback() {
-
-            @Override
-            public void messageArrived(final String topic, final MqttMessage message) throws Exception {
-                String topicParts[] = topic.split("/");
-                String prefix = topicParts[0];
-                String device = topicParts[1];
-                String postfix = topicParts[2];
-                switch (prefix.toUpperCase()) {
-                case "STAT":
-                    if (postfix.toUpperCase().equals("RESULT")) {
-                        LOG.fine(String.format("MQTT PROCESSED: Device state: %s %s", device,
-                                new String(message.getPayload())));
-                        Device d = deviceManager.getDeviceByTopic(device);
-                        d.updateStatus(new String(message.getPayload()));
-                    } else if (postfix.toUpperCase().startsWith("POWER")) {
-                        LOG.fine(String.format("MQTT PROCESSED: Port state: %s:%s %s", device, postfix,
-                                new String(message.getPayload())));
-                        Device d = deviceManager.getDeviceByTopic(device);
-                        d.getPort(postfix).setState(new String(message.getPayload()));
-                    }
-                    break;
-                case "TELE":
-                    if (postfix.toUpperCase().equals("STATE")) {
-                        LOG.fine(String.format("MQTT PROCESSED: Device state: %s %s", device,
-                                new String(message.getPayload())));
-                        Device d = deviceManager.getDeviceByTopic(device);
-                        d.updateStatus(new String(message.getPayload()));
-                    }
-                    break;
-                case "CMND":
-                    // ignore published command messages
-                    break;
-                default:
-                    LOG.warning(String.format("MQTT NOT PROCESSED: %s: %s", topic, new String(message.getPayload())));
-                    break;
-                }
-
-            }
-
-            @Override
-            public void deliveryComplete(final IMqttDeliveryToken token) {
-                // TODO Auto-generated method stub
-
-            }
-
-            @Override
-            public void connectionLost(final Throwable cause) {
-                // TODO Auto-generated method stub
-
-            }
-        });
-
-        deviceManager.requestDeviceStatus();
+        DeviceManager deviceManager = new DeviceManager(deviceRef);
 
         final Device s = deviceManager.getDeviceByTopic("front-door-light-switch");
 
@@ -168,8 +104,7 @@ public final class App {
             default:
                 LOG.info("Closing connections");
                 br.close();
-                client.disconnect();
-                client.close();
+                deviceManager.close();
                 return;
             }
         }

@@ -38,11 +38,6 @@ public class Device {
         this.firebaseId = null;
     }
 
-    // protected Device(final IMqttClient client, DatabaseReference database, String
-    // firebaseId) {
-    // this(null, client, database, firebaseId);
-    // }
-
     protected Device(final String topic, final IMqttClient client, DatabaseReference database) {
         this(topic, client, database, null);
     }
@@ -113,8 +108,9 @@ public class Device {
         client.publish(fullTopic, msg);
     }
 
-    public void updateStatus(String statusMessage) {
+    protected void updateStatus(String statusMessage) {
         Gson gson = new Gson();
+        @SuppressWarnings("unchecked")
         Map<String, Object> map = (Map<String, Object>) gson.fromJson(statusMessage, Map.class);
         LOG.finer("Status message parsed successfully");
         map.forEach((k, v) -> {
@@ -122,9 +118,10 @@ public class Device {
                 this.getPort(k).setState(v.toString());
             }
             if (k.toUpperCase().equals("WIFI")) {
-                LOG.finer("Process wifi status: " + v.toString());
+                LOG.finest("Process wifi status: " + v.toString());
+                @SuppressWarnings("unchecked")
                 Map<String, Object> wifiMap = (Map<String, Object>) v;
-                LOG.finer("Wifi map: " + wifiMap);
+                LOG.finest("Wifi map: " + wifiMap);
                 Object signal = wifiMap.get("Signal");
                 if (signal != null) {
                     try {
@@ -139,6 +136,15 @@ public class Device {
                 }
             }
         });
+    }
+
+    protected void close() {
+        try{
+            client.disconnect();
+            client.close();
+        } catch(Exception e){
+
+        }
     }
 
     public String getTopic() {
