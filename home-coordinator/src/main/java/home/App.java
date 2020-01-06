@@ -13,6 +13,7 @@ import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ServerValue;
 import com.google.firebase.database.ValueEventListener;
 
 import home.device.IOPort.Power;
@@ -67,6 +68,12 @@ public final class App {
 
             }
         });
+
+        DatabaseReference controllerRef = FirebaseDatabase.getInstance().getReference("/controller");
+        controllerRef.child("connected").setValueAsync("ONLINE");
+        controllerRef.child("connected").onDisconnect().setValueAsync("OFFLINE");
+        controllerRef.child("connectedChanged").setValueAsync(ServerValue.TIMESTAMP);
+        controllerRef.child("connectedChanged").onDisconnect().setValueAsync(ServerValue.TIMESTAMP);
 
         DatabaseReference deviceRef = FirebaseDatabase.getInstance().getReference("/devices");
 
