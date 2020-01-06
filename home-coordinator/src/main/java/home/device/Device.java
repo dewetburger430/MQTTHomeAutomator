@@ -8,6 +8,7 @@ import java.util.logging.Logger;
 import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.Exclude;
+import com.google.firebase.database.ServerValue;
 import com.google.gson.Gson;
 
 import org.eclipse.paho.client.mqttv3.IMqttClient;
@@ -19,6 +20,12 @@ import util.Firebase;
 
 public class Device {
 
+    public enum Connected {
+        UNKNOWN,
+        ONLINE,
+        OFFLINE,
+    }
+
     private static final Logger LOG = Logger.getLogger(Device.class.getName());
 
     @Exclude
@@ -29,6 +36,8 @@ public class Device {
     private final Map<String, IOPort> ports = new TreeMap<>();
     @Exclude
     private final String firebaseId;
+    @Exclude
+    private Connected connected;
 
     private String topic;
 
@@ -40,10 +49,12 @@ public class Device {
 
     protected Device(final String topic, final IMqttClient client, DatabaseReference database) {
         this(topic, client, database, null);
+        try{
+            requestStatus();
+        } catch(Exception e){}
     }
 
-    protected Device(final String topic, final IMqttClient client, final DatabaseReference database,
-            final String firebaseId) {
+    protected Device(final String topic, final IMqttClient client, final DatabaseReference database, final String firebaseId) {
         LOG.fine("Constructing new device: " + topic);
         this.client = client;
         this.topic = topic;
@@ -56,7 +67,8 @@ public class Device {
 
         LOG.finer("Update device in firebase");
         this.database = database.child("list").child(this.firebaseId);
-        this.database.updateChildrenAsync(java.util.Collections.singletonMap("topic", topic));
+        this.database.child("topic").setValueAsync(topic);
+        setLastAccess();
     }
 
     private String getOrAllocateFirebaseId(DatabaseReference database) {
@@ -100,6 +112,20 @@ public class Device {
         client.publish(fullTopic, msg);
     }
 
+    protected void setConnected(String value){
+        setLastAccess();
+        final Connected previousConnected = this.connected;
+        try{
+            this.connected = Connected.valueOf(value.toUpperCase());
+        } catch(Exception e){
+            LOG.warning(e.getMessage());
+            this.connected = Connected.UNKNOWN;
+        }
+        if (previousConnected != this.connected){
+            this.database.child("connected").setValueAsync(this.connected);
+        }
+}
+
     protected void requestStatus() throws MqttPersistenceException, MqttException {
         String fullTopic = String.format("cmnd/%s/STATE", this.topic);
         MqttMessage msg = new MqttMessage("".getBytes());
@@ -109,6 +135,7 @@ public class Device {
     }
 
     protected void updateStatus(String statusMessage) {
+        setLastAccess();
         Gson gson = new Gson();
         @SuppressWarnings("unchecked")
         Map<String, Object> map = (Map<String, Object>) gson.fromJson(statusMessage, Map.class);
@@ -127,8 +154,11 @@ public class Device {
                     try {
                         database.child("wifi").child("signal").setValueAsync(signal);
                         long now = Instant.now().getEpochSecond();
+                        // truncate
                         now = now - (now % (15 * 60));
-                        database.getRoot().child("stats").child("wifi").child(firebaseId).child(String.valueOf(now))
+                        // convert to millis
+                        now = now * 1000;
+                        database.getRoot().child("stats").child("wifiSignal").child(firebaseId).child(String.valueOf(now))
                                 .setValueAsync(signal);
                     } catch (Exception e) {
                         LOG.warning("Could not publish signal strength: " + e.getMessage());
@@ -136,6 +166,10 @@ public class Device {
                 }
             }
         });
+    }
+
+    protected void setLastAccess(){
+        this.database.child("lastAccess").setValueAsync(ServerValue.TIMESTAMP);
     }
 
     protected void close() {

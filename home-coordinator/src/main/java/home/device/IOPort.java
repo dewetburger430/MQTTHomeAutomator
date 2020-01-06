@@ -41,18 +41,19 @@ public class IOPort {
     }
 
     public void setState(final String state) {
-        LOG.finer("Set IOPort state: " + state.toString());
+        this.device.setLastAccess();
+        LOG.finer("Set IOPort state: " + state);
+        final State previousState = this.state;
         try {
-            final State ps = this.state;
             this.state = State.valueOf(state.toUpperCase());
-            if (ps != this.state) {
-                this.database.setValueAsync(this);
-            }
         } catch (final Exception e) {
             LOG.warning("Could not update state");
             this.state = State.UNKNOWN;
         }
-    }
+        if (previousState != this.state) {
+            this.database.child("state").setValueAsync(this.state);
+        }
+}
 
     public State getState() {
         return state;

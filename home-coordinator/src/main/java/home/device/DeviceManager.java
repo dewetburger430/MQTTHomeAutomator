@@ -35,6 +35,8 @@ public class DeviceManager {
         this.client = configureClient();
 
         loadDeviceMapFromFirebase();
+
+        subscribeToTopics();
         requestDeviceStatus();
     }
 
@@ -91,11 +93,11 @@ public class DeviceManager {
                 String postfix = topicParts[2];
                 switch (prefix.toUpperCase()) {
                 case "STAT":
-                    Device d = getDeviceByTopic(topic);
                     if (postfix.toUpperCase().equals("RESULT")) {
                         // This state message is the result of a state request
                         LOG.fine(String.format("MQTT PROCESSED: Device state: %s %s", fullTopic,
                                 new String(message.getPayload())));
+                        Device d = getDeviceByTopic(topic);
                         d.updateStatus(new String(message.getPayload()));
                     // } else if (postfix.toUpperCase().startsWith("POWER")) {
                     //     LOG.fine(String.format("MQTT PROCESSED: Port state: %s:%s", fullTopic,
@@ -106,8 +108,13 @@ public class DeviceManager {
                     }
                     break;
                 case "TELE":
-                    // This state message is send by the devices on their accord
-                    if (postfix.toUpperCase().equals("STATE")) {
+                    if (postfix.toUpperCase().equals("LWT")){
+                        LOG.fine(String.format("MQTT PROCESSED: Device connected state: %s %s", fullTopic,
+                                new String(message.getPayload())));
+                        Device d = getDeviceByTopic(topic);
+                        d.setConnected(new String(message.getPayload()));
+                    } else if (postfix.toUpperCase().equals("STATE")) {
+                        // This state message is send by the devices on their accord
                         LOG.finest(String.format("MQTT IGNORE MESSAGE: (DEVICE CONTROLLED STATE) %s: %s", fullTopic, new String(message.getPayload())));
                         // LOG.fine(String.format("MQTT PROCESSED: Device state: %s %s", fullTopic,
                         //         new String(message.getPayload())));
@@ -140,11 +147,16 @@ public class DeviceManager {
         });
 
         client.connect(options);
-        client.subscribe(String.format("#"));
-        // TODO: It looks like the following subscription can be used
-        //client.subscribe("STAT/+/RESULT");
 
         return client;
+    }
+
+    private void subscribeToTopics() throws MqttSecurityException, MqttException {
+        client.subscribe(String.format("#"));
+        // TODO: It looks like the following subscription can be used
+        //client.subscribe("stat/+/RESULT");
+        //client.subscribe("tele/+/LWT")
+
     }
     
     public void requestDeviceStatus() {
