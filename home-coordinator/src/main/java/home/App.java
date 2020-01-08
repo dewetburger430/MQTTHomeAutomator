@@ -11,6 +11,9 @@ import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ServerValue;
 
+import home.common.Port;
+import home.common.Power;
+import home.controlunit.ControlUnitManager;
 import home.device.DeviceManager;
 
 /**
@@ -55,7 +58,11 @@ public final class App {
 
         // Device controller
         DatabaseReference deviceRef = FirebaseDatabase.getInstance().getReference("/devices");
-        DeviceManager deviceManager = new DeviceManager(deviceRef);
+        DeviceManager deviceManager = DeviceManager.GetDeviceManager();
+        deviceManager.initiate(deviceRef);
+
+        // Control unit controller
+        ControlUnitManager controlUnitManger = new ControlUnitManager(FirebaseDatabase.getInstance().getReference("/controlUnits"));
 
         System.out.println("Press enter to exit...");
         System.in.read();

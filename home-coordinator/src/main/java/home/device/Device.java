@@ -11,11 +11,12 @@ import com.google.firebase.database.Exclude;
 import com.google.firebase.database.ServerValue;
 import com.google.gson.Gson;
 
-import org.eclipse.paho.client.mqttv3.IMqttClient;
+import org.eclipse.paho.client.mqttv3.IMqttAsyncClient;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
 import org.eclipse.paho.client.mqttv3.MqttPersistenceException;
 
+import home.common.Port;
 import util.Firebase;
 
 public class Device {
@@ -29,7 +30,7 @@ public class Device {
     private static final Logger LOG = Logger.getLogger(Device.class.getName());
 
     @Exclude
-    private final IMqttClient client;
+    private final IMqttAsyncClient client;
     @Exclude
     private final DatabaseReference database;
     @Exclude
@@ -47,14 +48,14 @@ public class Device {
         this.firebaseId = null;
     }
 
-    protected Device(final String topic, final IMqttClient client, DatabaseReference database) {
+    protected Device(final String topic, final IMqttAsyncClient client, DatabaseReference database) {
         this(topic, client, database, null);
         try{
             requestStatus();
         } catch(Exception e){}
     }
 
-    protected Device(final String topic, final IMqttClient client, final DatabaseReference database, final String firebaseId) {
+    protected Device(final String topic, final IMqttAsyncClient client, final DatabaseReference database, final String firebaseId) {
         LOG.fine("Constructing new device: " + topic);
         this.client = client;
         this.topic = topic;
@@ -96,9 +97,13 @@ public class Device {
         if (port != null) {
             return port;
         }
+        LOG.finest(this + ": ports lock waiting...");
         synchronized (ports) {
-            return ports.computeIfAbsent(name, n -> new IOPort(this, n, this.database.child("ports")));
+            LOG.finest(this + ": ports lock took...");
+            port = ports.computeIfAbsent(name, n -> new IOPort(this, n, this.database.child("ports")));
         }
+        LOG.finest(this + ": port lock released");
+        return port;
     }
 
     protected void send(final String postfix, final String message) throws MqttPersistenceException, MqttException {
@@ -110,6 +115,7 @@ public class Device {
         String fullTopic = String.format("cmnd/%s/%s", this.topic, postfix);
         LOG.finer("Publish MQTT message: " + fullTopic + " " + message);
         client.publish(fullTopic, msg);
+        LOG.finer("Publish MQTT message complete");
     }
 
     protected void setConnected(String value){
@@ -142,7 +148,10 @@ public class Device {
         LOG.finer("Status message parsed successfully");
         map.forEach((k, v) -> {
             if (k.toUpperCase().startsWith("POWER")) {
-                this.getPort(k).setState(v.toString());
+                LOG.finest("Processing power status for " + k + " = " + v.toString());
+                Port p = this.getPort(k);
+                LOG.finest("Set state");
+                p.setState(v.toString());
             }
             if (k.toUpperCase().equals("WIFI")) {
                 LOG.finest("Process wifi status: " + v.toString());
@@ -165,6 +174,7 @@ public class Device {
                     }
                 }
             }
+            LOG.finest("Processing complete");
         });
     }
 

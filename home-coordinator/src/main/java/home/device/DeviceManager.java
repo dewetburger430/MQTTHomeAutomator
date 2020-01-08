@@ -9,10 +9,10 @@ import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.GenericTypeIndicator;
 
-import org.eclipse.paho.client.mqttv3.IMqttClient;
+import org.eclipse.paho.client.mqttv3.IMqttAsyncClient;
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
+import org.eclipse.paho.client.mqttv3.MqttAsyncClient;
 import org.eclipse.paho.client.mqttv3.MqttCallback;
-import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
@@ -22,14 +22,15 @@ import util.Firebase;
 
 public class DeviceManager {
     private static final Logger LOG = Logger.getLogger(DeviceManager.class.getName());
+    private static DeviceManager instance;
 
     private Map<String, Device> deviceMapByTopic = new ConcurrentHashMap<>(32);
     private Map<String, Device> deviceMapByKey = new ConcurrentHashMap<>(32);
 
-    final DatabaseReference database;
-    final IMqttClient client;
+    private DatabaseReference database;
+    private IMqttAsyncClient client;
 
-    public DeviceManager(final DatabaseReference database) throws MqttSecurityException, MqttException {
+    public void initiate (final DatabaseReference database) throws MqttSecurityException, MqttException{
         this.database = database;
 
         this.client = configureClient();
@@ -38,6 +39,12 @@ public class DeviceManager {
 
         subscribeToTopics();
         requestDeviceStatus();
+    }
+    public static DeviceManager GetDeviceManager() {
+        if (instance == null){
+            instance = new DeviceManager();
+        }
+        return instance;
     }
 
     public Device getDeviceByTopic(final String topic) {
@@ -71,13 +78,13 @@ public class DeviceManager {
         }
     }
 
-    private MqttClient configureClient() throws MqttSecurityException, MqttException {
+    private IMqttAsyncClient configureClient() throws MqttSecurityException, MqttException {
         String mqttAddress = System.getenv("mqttAddress");
         String mqttPort = System.getenv("mqttPort");
         LOG.info("MQTT Server: " + mqttAddress + ":" + mqttPort);
 
         final String clientId = UUID.randomUUID().toString();
-        final MqttClient client = new MqttClient("tcp://" + mqttAddress + ":" + mqttPort, clientId);
+        final IMqttAsyncClient client = new MqttAsyncClient("tcp://" + mqttAddress + ":" + mqttPort, clientId);
         final MqttConnectOptions options = new MqttConnectOptions();
         options.setAutomaticReconnect(true);
         options.setCleanSession(true);
@@ -86,7 +93,8 @@ public class DeviceManager {
         client.setCallback(new MqttCallback() {
 
             @Override
-            public void messageArrived(final String fullTopic, final MqttMessage message) throws Exception {
+            public void messageArrived(final String fullTopic, final MqttMessage message) {
+                LOG.finest("MQTT message arrived, processing...");
                 String topicParts[] = fullTopic.split("/");
                 String prefix = topicParts[0];
                 String topic = topicParts[1];
@@ -130,7 +138,7 @@ public class DeviceManager {
                     LOG.warning(String.format("MQTT NOT PROCESSED: %s: %s", fullTopic, new String(message.getPayload())));
                     break;
                 }
-
+                LOG.finest("MQTT message processing complete");
             }
 
             @Override
@@ -152,7 +160,7 @@ public class DeviceManager {
     }
 
     private void subscribeToTopics() throws MqttSecurityException, MqttException {
-        client.subscribe(String.format("#"));
+        client.subscribe(String.format("#"), 0);
         // TODO: It looks like the following subscription can be used
         //client.subscribe("stat/+/RESULT");
         //client.subscribe("tele/+/LWT")
