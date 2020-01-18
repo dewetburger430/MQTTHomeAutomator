@@ -62,10 +62,14 @@ public final class App {
         deviceManager.initiate(deviceRef);
 
         // Control unit controller
-        ControlUnitManager controlUnitManger = new ControlUnitManager(FirebaseDatabase.getInstance().getReference("/controlUnits"));
+        ControlUnitManager controlUnitManager = new ControlUnitManager(FirebaseDatabase.getInstance().getReference("/controlUnits"));
 
         System.out.println("Press enter to exit...");
         System.in.read();
+        LOG.info("Terminating program");
         deviceManager.close();
+        LOG.info("Notify firebase to go offline");
+        FirebaseDatabase.getInstance().goOffline();
+        LOG.fine("End of main");
     }
 }

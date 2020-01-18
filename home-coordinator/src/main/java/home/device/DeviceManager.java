@@ -1,9 +1,13 @@
 package home.device;
 
+import java.io.Closeable;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseReference;
@@ -20,7 +24,7 @@ import org.eclipse.paho.client.mqttv3.MqttSecurityException;
 
 import util.Firebase;
 
-public class DeviceManager {
+public class DeviceManager implements Closeable {
     private static final Logger LOG = Logger.getLogger(DeviceManager.class.getName());
     private static DeviceManager instance;
 
@@ -29,6 +33,9 @@ public class DeviceManager {
 
     private DatabaseReference database;
     private IMqttAsyncClient client;
+
+    private Thread clientMonitor;
+    private final AtomicBoolean isRunning = new AtomicBoolean(true);
 
     public void initiate (final DatabaseReference database) throws MqttSecurityException, MqttException{
         this.database = database;
@@ -49,7 +56,7 @@ public class DeviceManager {
 
     public Device getDeviceByTopic(final String topic) {
         Device device = deviceMapByTopic.computeIfAbsent(topic.toUpperCase(),
-            key -> new Device(topic, client, database, null));
+                key -> new Device(topic, client, database, null));
         deviceMapByKey.putIfAbsent(device.getFirebaseId(), device);
         device.setTopic(topic);
         return device;
@@ -86,8 +93,8 @@ public class DeviceManager {
         final String clientId = UUID.randomUUID().toString();
         final IMqttAsyncClient client = new MqttAsyncClient("tcp://" + mqttAddress + ":" + mqttPort, clientId);
         final MqttConnectOptions options = new MqttConnectOptions();
-        options.setAutomaticReconnect(true);
-        options.setCleanSession(true);
+        options.setAutomaticReconnect(false);
+        options.setCleanSession(false);
         options.setConnectionTimeout(10);
 
         client.setCallback(new MqttCallback() {
@@ -107,54 +114,82 @@ public class DeviceManager {
                                 new String(message.getPayload())));
                         Device d = getDeviceByTopic(topic);
                         d.updateStatus(new String(message.getPayload()));
-                    // } else if (postfix.toUpperCase().startsWith("POWER")) {
+                        // } else if (postfix.toUpperCase().startsWith("POWER")) {
                     //     LOG.fine(String.format("MQTT PROCESSED: Port state: %s:%s", fullTopic,
                     //             new String(message.getPayload())));
                     //     d.getPort(postfix).setState(new String(message.getPayload()));
-                    } else {
-                        LOG.finest(String.format("MQTT IGNORE MESSAGE: %s: %s", fullTopic, new String(message.getPayload())));
-                    }
-                    break;
-                case "TELE":
-                    if (postfix.toUpperCase().equals("LWT")){
-                        LOG.fine(String.format("MQTT PROCESSED: Device connected state: %s %s", fullTopic,
-                                new String(message.getPayload())));
-                        Device d = getDeviceByTopic(topic);
-                        d.setConnected(new String(message.getPayload()));
-                    } else if (postfix.toUpperCase().equals("STATE")) {
-                        // This state message is send by the devices on their accord
-                        LOG.finest(String.format("MQTT IGNORE MESSAGE: (DEVICE CONTROLLED STATE) %s: %s", fullTopic, new String(message.getPayload())));
-                        // LOG.fine(String.format("MQTT PROCESSED: Device state: %s %s", fullTopic,
-                        //         new String(message.getPayload())));
-                        // d.updateStatus(new String(message.getPayload()));
-                    } else {
-                        LOG.finest(String.format("MQTT IGNORE MESSAGE: %s: %s", fullTopic, new String(message.getPayload())));
-                    }
-                    break;
-                case "CMND":
+                } else {
                     LOG.finest(String.format("MQTT IGNORE MESSAGE: %s: %s", fullTopic, new String(message.getPayload())));
-                    break;
-                default:
-                    LOG.warning(String.format("MQTT NOT PROCESSED: %s: %s", fullTopic, new String(message.getPayload())));
-                    break;
+                }
+                break;
+            case "TELE":
+                if (postfix.toUpperCase().equals("LWT")){
+                    LOG.fine(String.format("MQTT PROCESSED: Device connected state: %s %s", fullTopic,
+                            new String(message.getPayload())));
+                    Device d = getDeviceByTopic(topic);
+                    d.setConnected(new String(message.getPayload()));
+                } else if (postfix.toUpperCase().equals("STATE")) {
+                    // This state message is send by the devices on their accord
+                    LOG.finest(String.format("MQTT IGNORE MESSAGE: (DEVICE CONTROLLED STATE) %s: %s", fullTopic, new String(message.getPayload())));
+                    // LOG.fine(String.format("MQTT PROCESSED: Device state: %s %s", fullTopic,
+                    //         new String(message.getPayload())));
+                    // d.updateStatus(new String(message.getPayload()));
+                } else {
+                    LOG.finest(String.format("MQTT IGNORE MESSAGE: %s: %s", fullTopic, new String(message.getPayload())));
+                }
+                break;
+            case "CMND":
+                LOG.finest(String.format("MQTT IGNORE MESSAGE: %s: %s", fullTopic, new String(message.getPayload())));
+                break;
+            default:
+                LOG.warning(String.format("MQTT NOT PROCESSED: %s: %s", fullTopic, new String(message.getPayload())));
+                break;
                 }
                 LOG.finest("MQTT message processing complete");
             }
 
             @Override
             public void deliveryComplete(final IMqttDeliveryToken token) {
-                // TODO Auto-generated method stub
-
+                try {
+                    LOG.finer("MQTT message delivered: Topics = {"
+                            + Stream.of(token.getTopics()).collect(Collectors.joining(", ")) + "} + message = "
+                            + token.getMessage());
+                } catch (Exception e) {
+                }
             }
 
             @Override
             public void connectionLost(final Throwable cause) {
-                // TODO Auto-generated method stub
-
+                LOG.severe("MQTT connection lost: " + cause.getMessage());
             }
         });
 
         client.connect(options);
+
+        clientMonitor = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                boolean connectedPrev = true;
+                while (isRunning.get()) {
+                    try {
+                        Thread.sleep(1000);
+                        if (!client.isConnected()) {
+                            connectedPrev = false;
+                            LOG.fine("Trying to reconnect to MQTT broker");
+                            client.reconnect();
+                        } else {
+                            if (!connectedPrev) {
+                                LOG.info("MQTT connection reconnected");
+                            }
+                            connectedPrev = true;
+                        }
+                    } catch (Exception e) {
+                    }
+                }
+            }
+        }, "clientMonitor");
+
+        clientMonitor.start();
 
         return client;
     }
@@ -166,7 +201,7 @@ public class DeviceManager {
         //client.subscribe("tele/+/LWT")
 
     }
-    
+
     public void requestDeviceStatus() {
         deviceMapByTopic.entrySet().iterator().forEachRemaining(e -> {
             try {
@@ -177,7 +212,14 @@ public class DeviceManager {
         });
     }
 
-    public void close(){
-        deviceMapByTopic.values().forEach(d -> d.close());
+    public void close() {
+        try {
+            isRunning.set(false);
+            clientMonitor.join();
+            LOG.info("Disconnecting MQTT client");
+            client.disconnect(0);
+        } catch (Exception e) {
+            LOG.severe("Could not close MQTT connection");
+        }
     }
 }

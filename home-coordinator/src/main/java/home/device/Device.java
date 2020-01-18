@@ -182,15 +182,6 @@ public class Device {
         this.database.child("lastAccess").setValueAsync(ServerValue.TIMESTAMP);
     }
 
-    protected void close() {
-        try{
-            client.disconnect();
-            client.close();
-        } catch(Exception e){
-
-        }
-    }
-
     public String getTopic() {
         return topic;
     }
